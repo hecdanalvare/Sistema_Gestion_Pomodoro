@@ -1,21 +1,21 @@
 # Archivo: main.py
-# Programa principal: solo se importan las clases, se crean los objetos y se ejecuta
+# Solo se importan las clases, se crean los objetos y se arranca la ventana
 
+import tkinter as tk
 from ConfiguracionPomodoro import ConfiguracionPomodoro
 from HistorialSesiones import HistorialSesiones
 from SesionPomodoro import SesionPomodoro
-from MenuPomodoro import MenuPomodoro
+from Estadisticas import Estadisticas
+from GestorExcel import GestorExcel
+from InterfazPomodoro import InterfazPomodoro
 
-try:
-    configuracion = ConfiguracionPomodoro(25, 5)
-    historial = HistorialSesiones()
-    sesion = SesionPomodoro(configuracion, historial)
-    menu = MenuPomodoro(sesion, configuracion, historial)
+ventana = tk.Tk()
 
-    menu.ejecutar()
-except KeyboardInterrupt:
-    print("\nPrograma cerrado con Ctrl+C")
-except Exception as error:
-    print("Ocurrio un error inesperado:", error)
-finally:
-    print("Fin del programa")
+gestor = GestorExcel("Registro_Pomodoro.xlsx")
+configuracion = ConfiguracionPomodoro(25, 5)
+historial = HistorialSesiones()
+sesion = SesionPomodoro(configuracion, historial)
+estadisticas = Estadisticas(historial)
+
+aplicacion = InterfazPomodoro(ventana, sesion, configuracion, historial, gestor, estadisticas)
+ventana.mainloop()

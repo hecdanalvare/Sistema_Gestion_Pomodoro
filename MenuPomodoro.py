@@ -1,5 +1,6 @@
 # Archivo: MenuPomodoro.py
-# Menu de consola. Recibe los objetos creados en main.py y llama sus metodos
+# Menu de consola (parcial 2). En el parcial 3 el programa principal es la interfaz grafica,
+# pero este menu se conserva y se puede correr directamente este archivo
 
 from Cronometro import Cronometro
 
@@ -114,3 +115,19 @@ class MenuPomodoro:
             except ValueError as error:
                 print("Error:", error)
         print("Hasta luego, buen estudio")
+
+
+# version de consola del parcial 2 (se conserva). Se corre directamente este archivo
+if __name__ == "__main__":
+    from ConfiguracionPomodoro import ConfiguracionPomodoro
+    from HistorialSesiones import HistorialSesiones
+    from SesionPomodoro import SesionPomodoro
+
+    configuracion = ConfiguracionPomodoro(25, 5)
+    historial = HistorialSesiones()
+    sesion = SesionPomodoro(configuracion, historial)
+    menu = MenuPomodoro(sesion, configuracion, historial)
+    try:
+        menu.ejecutar()
+    except KeyboardInterrupt:
+        print("\nPrograma cerrado con Ctrl+C")
