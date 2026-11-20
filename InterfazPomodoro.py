@@ -2,9 +2,11 @@
 # Frontend: toda la ventana del programa hecha con tkinter.
 # Esta clase no toca el Excel directamente, para eso llama al GestorExcel (backend)
 
+import os
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from tkinter import filedialog
 from Materia import Materia
 from Cronometro import Cronometro
 
@@ -29,9 +31,13 @@ class InterfazPomodoro:
         self.en_marcha = False
         self.id_after = None    # para poder cancelar el .after() cuando se pausa
 
+        self.crear_menu()
         self.crear_zona_reloj()
         self.crear_zona_opciones()
         self.crear_zona_historial()
+
+        # si cierran con la X tambien se pregunta si hay un bloque corriendo
+        self.ventana.protocol("WM_DELETE_WINDOW", self.salir)
 
         self.cargar_datos()
         self.cargar_tabla()
@@ -40,6 +46,31 @@ class InterfazPomodoro:
     # ------------------------------------------------------------------
     # construccion de la ventana
     # ------------------------------------------------------------------
+
+    def crear_menu(self):
+        # BARRA DE MENU
+        self.barra_menu = tk.Menu(self.ventana)
+
+        self.menu_archivo = tk.Menu(self.barra_menu, tearoff=0)
+        self.menu_archivo.add_command(label="Abrir Excel...", command=self.abrir_archivo)
+        self.menu_archivo.add_command(label="Guardar copia como...", command=self.guardar_como)
+        self.menu_archivo.add_separator()
+        self.menu_archivo.add_command(label="Salir", command=self.salir)
+        self.barra_menu.add_cascade(label="Archivo", menu=self.menu_archivo)
+
+        self.menu_herramientas = tk.Menu(self.barra_menu, tearoff=0)
+        self.menu_herramientas.add_command(label="Configurar tiempos", command=self.abrir_configuracion)
+        self.menu_herramientas.add_command(label="Estadisticas", command=self.abrir_estadisticas)
+        self.menu_herramientas.add_separator()
+        self.menu_herramientas.add_command(label="Eliminar materia seleccionada", command=self.eliminar_materia)
+        self.menu_herramientas.add_command(label="Borrar todo el historial", command=self.borrar_historial)
+        self.barra_menu.add_cascade(label="Herramientas", menu=self.menu_herramientas)
+
+        self.menu_ayuda = tk.Menu(self.barra_menu, tearoff=0)
+        self.menu_ayuda.add_command(label="Acerca de", command=self.acerca_de)
+        self.barra_menu.add_cascade(label="Ayuda", menu=self.menu_ayuda)
+
+        self.ventana.config(menu=self.barra_menu)
 
     def crear_zona_reloj(self):
         self.marco_reloj = tk.Frame(self.ventana, padx=20, pady=10)
@@ -188,6 +219,8 @@ class InterfazPomodoro:
             messagebox.showerror("Error con el archivo", str(error))
 
         self.actualizar_lista_materias()
+        nombre = os.path.basename(self.gestor.consultar_archivo())
+        self.ventana.title(f"Sistema de Gestion de Tiempo Pomodoro - {nombre}")
 
     def actualizar_lista_materias(self):
         nombres = []
@@ -221,6 +254,25 @@ class InterfazPomodoro:
         self.actualizar_lista_materias()
         self.materia.set(nueva.consultar_nombre())
         self.entrada_materia.delete(0, tk.END)
+
+    def eliminar_materia(self):
+        nombre = self.materia.get()
+        if nombre == "General":
+            messagebox.showwarning("Materia", "La materia General no se puede eliminar")
+            return
+        if not messagebox.askyesno("Eliminar materia", f"Eliminar la materia '{nombre}'?\n"
+                                                       "Las sesiones que ya tiene no se borran"):
+            return
+        try:
+            self.gestor.eliminar_materia(nombre)
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("Error", str(error))
+            return
+        for materia in self.materias:
+            if materia.consultar_nombre() == nombre:
+                self.materias.remove(materia)
+                break
+        self.actualizar_lista_materias()
 
     def guardar_en_excel(self, sesion):
         try:
@@ -283,6 +335,79 @@ class InterfazPomodoro:
         self.tabla.delete(str(id_sesion))
         self.actualizar_total()
         self.actualizar_pantalla()
+
+    def borrar_historial(self):
+        if self.en_marcha:
+            messagebox.showwarning("Historial", "Pause o reinicie el bloque primero")
+            return
+        if not messagebox.askyesno("Borrar historial", "Se van a borrar TODAS las sesiones del Excel.\n"
+                                                       "Esto no se puede deshacer. Continuar?"):
+            return
+        try:
+            self.gestor.eliminar_todas_las_sesiones()
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("Error", str(error))
+            return
+        self.historial.limpiar_historial()
+        self.sesion.reiniciar_sesion()
+        self.cargar_tabla()
+        self.detener()
+        self.boton_iniciar.config(text="Iniciar")
+        self.actualizar_pantalla()
+
+    # ------------------------------------------------------------------
+    # menu archivo (filedialog)
+    # ------------------------------------------------------------------
+
+    def abrir_archivo(self):
+        if self.en_marcha:
+            messagebox.showwarning("Abrir", "Pause o reinicie el bloque antes de cambiar de archivo")
+            return
+        ruta = filedialog.askopenfilename(title="Abrir un registro de Pomodoro",
+                                          filetypes=[("Archivos de Excel", "*.xlsx")])
+        if not ruta:
+            return  # el usuario cancelo
+        try:
+            self.gestor.cambiar_archivo(ruta)
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("No se pudo abrir", str(error))
+            return
+
+        # se carga todo lo del archivo nuevo y la sesion empieza de cero
+        self.sesion.reiniciar_sesion()
+        self.medidor = None
+        self.boton_iniciar.config(text="Iniciar")
+        self.cargar_datos()
+        self.cargar_tabla()
+        self.actualizar_pantalla()
+        messagebox.showinfo("Archivo abierto", "Se cargo el archivo " + os.path.basename(ruta))
+
+    def guardar_como(self):
+        ruta = filedialog.asksaveasfilename(title="Guardar copia del registro", defaultextension=".xlsx",
+                                            filetypes=[("Archivos de Excel", "*.xlsx")])
+        if not ruta:
+            return
+        try:
+            self.gestor.guardar_copia(ruta)
+            self.gestor.cambiar_archivo(ruta)  # se sigue trabajando sobre la copia, como en clase
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("No se pudo guardar", str(error))
+            return
+        self.ventana.title(f"Sistema de Gestion de Tiempo Pomodoro - {os.path.basename(ruta)}")
+        messagebox.showinfo("Archivo guardado", "Se guardo la copia y ahora se trabaja sobre ella")
+
+    def acerca_de(self):
+        messagebox.showinfo("Acerca de", "Sistema de Gestion de Tiempo Pomodoro\n"
+                                         "Programacion II - Parcial 3\n"
+                                         "Hector Danilo Alvarez Arenas\n\n"
+                                         "Bloques de 25 min de estudio y 5 de descanso.\n"
+                                         "Cada 4 pomodoros hay un descanso largo.")
+
+    def salir(self):
+        if self.en_marcha:
+            if not messagebox.askyesno("Salir", "Hay un bloque corriendo y no se va a guardar. Salir igual?"):
+                return
+        self.ventana.destroy()
 
     # ------------------------------------------------------------------
     # ventanas secundarias (Toplevel)
