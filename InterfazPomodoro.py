@@ -21,7 +21,7 @@ class InterfazPomodoro:
         self.estadisticas = estadisticas
 
         self.ventana.title("Sistema de Gestion de Tiempo Pomodoro")
-        self.ventana.geometry("820x420")
+        self.ventana.geometry("820x700")
         self.ventana.resizable(False, False)
 
         self.materias = []      # lista de objetos Materia
@@ -31,8 +31,10 @@ class InterfazPomodoro:
 
         self.crear_zona_reloj()
         self.crear_zona_opciones()
+        self.crear_zona_historial()
 
         self.cargar_datos()
+        self.cargar_tabla()
         self.actualizar_pantalla()
 
     # ------------------------------------------------------------------
@@ -101,6 +103,53 @@ class InterfazPomodoro:
         tk.Checkbutton(self.marco_opciones, text="Sonido al terminar un bloque",
                        variable=self.sonido).grid(row=8, column=0, columnspan=2, sticky="w")
 
+    def crear_zona_historial(self):
+        self.marco_historial = tk.Frame(self.ventana, padx=15)
+        self.marco_historial.grid(row=1, column=0, columnspan=2, sticky="we", pady=(5, 0))
+
+        tk.Label(self.marco_historial, text="Historial de sesiones", font=("Arial", 12, "bold")).grid(row=0, column=0,
+                                                                                                   sticky="w")
+        # TREEVIEW
+        columnas = ("id", "fecha", "hora", "materia", "tipo", "minutos", "estado", "nota")
+        self.tabla = ttk.Treeview(self.marco_historial, columns=columnas, show="headings", height=9)
+
+        self.tabla.heading("id", text="#")
+        self.tabla.heading("fecha", text="Fecha")
+        self.tabla.heading("hora", text="Hora")
+        self.tabla.heading("materia", text="Materia")
+        self.tabla.heading("tipo", text="Tipo")
+        self.tabla.heading("minutos", text="Minutos")
+        self.tabla.heading("estado", text="Estado")
+        self.tabla.heading("nota", text="Nota")
+
+        self.tabla.column("id", width=40, anchor="center")
+        self.tabla.column("fecha", width=90, anchor="center")
+        self.tabla.column("hora", width=55, anchor="center")
+        self.tabla.column("materia", width=120)
+        self.tabla.column("tipo", width=105)
+        self.tabla.column("minutos", width=65, anchor="center")
+        self.tabla.column("estado", width=85, anchor="center")
+        self.tabla.column("nota", width=190)
+
+        # colores por tipo de bloque
+        self.tabla.tag_configure("Estudio", background="#fbe3e0")
+        self.tabla.tag_configure("Descanso", background="#e2f5e9")
+        self.tabla.tag_configure("Descanso largo", background="#d9f2ee")
+        self.tabla.tag_configure("Libre", background="#e1ecf8")
+
+        self.tabla.grid(row=1, column=0, columnspan=3)
+
+        barra = ttk.Scrollbar(self.marco_historial, orient="vertical", command=self.tabla.yview)
+        self.tabla.configure(yscrollcommand=barra.set)
+        barra.grid(row=1, column=3, sticky="ns")
+
+        self.etiqueta_total = tk.Label(self.marco_historial, text="", font=("Arial", 10))
+        self.etiqueta_total.grid(row=2, column=0, sticky="w", pady=8)
+
+        self.boton_eliminar = tk.Button(self.marco_historial, text="Eliminar sesion", width=15,
+                                        command=self.eliminar_sesion)
+        self.boton_eliminar.grid(row=2, column=2, sticky="e", pady=8)
+
     # ------------------------------------------------------------------
     # datos (se piden al backend)
     # ------------------------------------------------------------------
@@ -168,6 +217,62 @@ class InterfazPomodoro:
             self.gestor.guardar_sesion(sesion)
         except (ValueError, PermissionError) as error:
             messagebox.showerror("No se pudo guardar", str(error))
+        self.agregar_a_tabla(sesion)
+        self.actualizar_total()
+
+    # ------------------------------------------------------------------
+    # tabla del historial
+    # ------------------------------------------------------------------
+
+    def valores_de_sesion(self, sesion):
+        if sesion["completada"]:
+            estado = "Completa"
+        else:
+            estado = "Incompleta"
+        return (sesion["id"], sesion["fecha"], sesion["hora"], sesion["materia"], sesion["tipo"],
+                sesion["duracion"], estado, sesion["nota"])
+
+    def agregar_a_tabla(self, sesion):
+        # el iid de cada fila es el id de la sesion, asi es facil encontrarla despues
+        self.tabla.insert("", tk.END, iid=str(sesion["id"]), values=self.valores_de_sesion(sesion),
+                          tags=(sesion["tipo"],))
+        self.tabla.see(str(sesion["id"]))
+
+    def cargar_tabla(self):
+        for item in self.tabla.get_children():
+            self.tabla.delete(item)
+        for sesion in self.historial.consultar_historial():
+            self.agregar_a_tabla(sesion)
+        self.actualizar_total()
+
+    def actualizar_total(self):
+        resumen = self.estadisticas.resumen_general()
+        self.etiqueta_total.config(text=f"Sesiones: {resumen['sesiones']}   |   "
+                                        f"Estudio total: {resumen['minutos_estudio']} min   |   "
+                                        f"Pomodoros completos: {resumen['pomodoros']}")
+
+    def sesion_seleccionada(self):
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            messagebox.showerror("Error", "Primero seleccione una sesion de la tabla")
+            return None
+        return int(seleccion[0])
+
+    def eliminar_sesion(self):
+        id_sesion = self.sesion_seleccionada()
+        if id_sesion is None:
+            return
+        if not messagebox.askyesno("Eliminar", f"Seguro que quiere eliminar la sesion #{id_sesion}?"):
+            return
+        try:
+            self.gestor.eliminar_sesion(id_sesion)
+            self.historial.eliminar_sesion(id_sesion)
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("No se pudo eliminar", str(error))
+            return
+        self.tabla.delete(str(id_sesion))
+        self.actualizar_total()
+        self.actualizar_pantalla()
 
     # ------------------------------------------------------------------
     # temporizador
