@@ -61,11 +61,15 @@ class GestorExcel:
             cambio = True
         return cambio
 
-    def abrir_libro(self):
+    def abrir_libro(self, crear_si_falta=True):
         try:
             return load_workbook(self.__nombre_archivo)
         except FileNotFoundError:
-            raise ValueError("No se encontro el archivo " + self.__nombre_archivo)
+            if not crear_si_falta:
+                raise ValueError("No se encontro el archivo " + self.__nombre_archivo)
+            # si borraron el archivo con el programa abierto, se vuelve a crear
+            self.preparar_archivo()
+            return load_workbook(self.__nombre_archivo)
         except (InvalidFileException, BadZipFile, KeyError):
             raise ValueError("El archivo esta danado o no es un archivo de Excel")
 
@@ -83,7 +87,7 @@ class GestorExcel:
         anterior = self.__nombre_archivo
         self.__nombre_archivo = ruta
         try:
-            libro = self.abrir_libro()
+            libro = self.abrir_libro(crear_si_falta=False)
         except ValueError:
             self.__nombre_archivo = anterior
             raise
@@ -112,8 +116,8 @@ class GestorExcel:
             try:
                 sesion = {
                     "id": int(fila[0]),
-                    "fecha": str(fila[1]),
-                    "hora": str(fila[2]),
+                    "fecha": self.texto_fecha(fila[1]),
+                    "hora": self.texto_hora(fila[2]),
                     "materia": str(fila[3]),
                     "tipo": str(fila[4]),
                     "duracion": int(fila[5]),
@@ -125,6 +129,18 @@ class GestorExcel:
                 print("Se salto una fila con datos raros:", fila)
         libro.close()
         return sesiones
+
+    # si alguien abre el archivo en Excel y lo guarda, Excel puede convertir la fecha y la hora
+    # en objetos de fecha; aqui se vuelven a dejar como texto
+    def texto_fecha(self, valor):
+        if hasattr(valor, "strftime"):
+            return valor.strftime("%Y-%m-%d")
+        return str(valor)
+
+    def texto_hora(self, valor):
+        if hasattr(valor, "strftime"):
+            return valor.strftime("%H:%M")
+        return str(valor)
 
     def guardar_sesion(self, sesion):
         libro = self.abrir_libro()

@@ -459,6 +459,7 @@ class InterfazPomodoro:
         if self.en_marcha:
             if not messagebox.askyesno("Salir", "Hay un bloque corriendo y no se va a guardar. Salir igual?"):
                 return
+            self.pausar()  # se cancela el .after() pendiente antes de cerrar
         self.ventana.destroy()
 
     # ------------------------------------------------------------------
