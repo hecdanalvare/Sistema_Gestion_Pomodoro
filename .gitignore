@@ -1,0 +1,10 @@
+# cosas de python que no hace falta subir
+__pycache__/
+*.pyc
+
+# configuracion personal de PyCharm
+.idea/workspace.xml
+.idea/shelf/
+
+# archivos temporales que crea Excel cuando el archivo esta abierto
+~$*.xlsx
