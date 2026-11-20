@@ -38,6 +38,7 @@ class InterfazPomodoro:
 
         # si cierran con la X tambien se pregunta si hay un bloque corriendo
         self.ventana.protocol("WM_DELETE_WINDOW", self.salir)
+        self.crear_atajos()
 
         self.cargar_datos()
         self.cargar_tabla()
@@ -67,6 +68,7 @@ class InterfazPomodoro:
         self.barra_menu.add_cascade(label="Herramientas", menu=self.menu_herramientas)
 
         self.menu_ayuda = tk.Menu(self.barra_menu, tearoff=0)
+        self.menu_ayuda.add_command(label="Atajos de teclado", command=self.mostrar_atajos)
         self.menu_ayuda.add_command(label="Acerca de", command=self.acerca_de)
         self.barra_menu.add_cascade(label="Ayuda", menu=self.menu_ayuda)
 
@@ -190,6 +192,47 @@ class InterfazPomodoro:
         self.boton_eliminar = tk.Button(self.marco_historial, text="Eliminar sesion", width=15,
                                         command=self.eliminar_sesion)
         self.boton_eliminar.grid(row=2, column=2, sticky="e", pady=8, padx=(8, 0))
+
+    # ------------------------------------------------------------------
+    # atajos con .bind()
+    # ------------------------------------------------------------------
+
+    def crear_atajos(self):
+        self.ventana.bind("<space>", self.atajo_iniciar)
+        self.entrada_materia.bind("<Return>", self.atajo_agregar_materia)
+        self.tabla.bind("<Double-1>", self.atajo_editar)
+        self.tabla.bind("<Delete>", self.atajo_eliminar)
+        self.lista_materias.bind("<<ComboboxSelected>>", self.materia_cambiada)
+
+    def atajo_iniciar(self, evento):
+        # si esta escribiendo en un Entry, el espacio es para el texto, no para el reloj
+        # (y en botones, radio y check el espacio ya hace su propia accion)
+        if evento.widget.winfo_class() in ("Entry", "TEntry", "TCombobox", "Button", "Radiobutton", "Checkbutton"):
+            return
+        self.iniciar_pausar()
+
+    def atajo_agregar_materia(self, evento):
+        self.agregar_materia()
+
+    def atajo_editar(self, evento):
+        # solo si el doble clic fue sobre una fila (no sobre el encabezado)
+        if self.tabla.identify_row(evento.y):
+            self.abrir_edicion()
+
+    def atajo_eliminar(self, evento):
+        self.eliminar_sesion()
+
+    def materia_cambiada(self, evento):
+        # si cambia la materia con el bloque andando, el bloque queda con la nueva
+        self.sesion.cambiar_materia(self.materia.get())
+        self.actualizar_pantalla()
+
+    def mostrar_atajos(self):
+        messagebox.showinfo("Atajos de teclado", "Barra espaciadora: iniciar / pausar\n"
+                                                 "Enter (en Nueva materia): agregar materia\n"
+                                                 "Doble clic en una sesion: editarla\n"
+                                                 "Suprimir (con una sesion seleccionada): eliminarla\n"
+                                                 "Escape: cerrar una ventana secundaria")
 
     # ------------------------------------------------------------------
     # datos (se piden al backend)
@@ -421,6 +464,7 @@ class InterfazPomodoro:
         ventana2.resizable(False, False)
         ventana2.transient(self.ventana)  # que quede encima de la principal
         ventana2.grab_set()               # y que no se pueda tocar la principal mientras este abierta
+        ventana2.bind("<Escape>", lambda evento: ventana2.destroy())
         return ventana2
 
     def abrir_configuracion(self):
@@ -441,11 +485,13 @@ class InterfazPomodoro:
         tk.Label(marco, text="(entre 1 y 120, el descanso mas corto)", fg="gray").grid(row=2, column=0, columnspan=2)
         tk.Button(marco, text="Guardar", width=12, command=self.guardar_configuracion).grid(row=3, column=0,
                                                                                          columnspan=2, pady=12)
+        self.ventana_config.bind("<Return>", lambda evento: self.guardar_configuracion())
+        self.entrada_estudio.focus_set()
 
     def guardar_configuracion(self):
         try:
-            estudio = int(self.entrada_estudio.get())
-            descanso = int(self.entrada_descanso.get())
+            estudio = int(self.entrada_estudio.get().strip())
+            descanso = int(self.entrada_descanso.get().strip())
         except ValueError:
             messagebox.showerror("Dato no valido", "Escriba los minutos como numeros enteros", parent=self.ventana_config)
             return
@@ -694,5 +740,6 @@ class InterfazPomodoro:
 
         self.etiqueta_estado.config(text=estado, fg=color)
         self.etiqueta_reloj.config(text=tiempo, fg=color)
-        self.etiqueta_info.config(text=f"Pomodoros hoy: {self.estadisticas.pomodoros_de_hoy()}   |   "
-                                       f"Minutos de estudio hoy: {self.estadisticas.minutos_de_hoy()}")
+        self.etiqueta_info.config(text=f"Materia: {self.materia.get()}   |   "
+                                       f"Pomodoros hoy: {self.estadisticas.pomodoros_de_hoy()}   |   "
+                                       f"Estudio hoy: {self.estadisticas.minutos_de_hoy()} min")

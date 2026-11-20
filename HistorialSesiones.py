@@ -52,6 +52,10 @@ class HistorialSesiones:
         raise ValueError(f"No existe una sesion con id {id_sesion}")
 
     def actualizar_sesion(self, id_sesion, materia, nota, completada):
+        if materia.strip() == "":
+            raise ValueError("La materia no puede quedar vacia")
+        if len(nota) > 60:
+            raise ValueError("La nota puede tener maximo 60 caracteres")
         sesion = self.buscar_sesion(id_sesion)
         sesion["materia"] = materia
         sesion["nota"] = nota
