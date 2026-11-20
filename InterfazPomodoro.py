@@ -103,6 +103,12 @@ class InterfazPomodoro:
         tk.Checkbutton(self.marco_opciones, text="Sonido al terminar un bloque",
                        variable=self.sonido).grid(row=8, column=0, columnspan=2, sticky="w")
 
+        # botones que abren las ventanas secundarias
+        tk.Button(self.marco_opciones, text="Configurar tiempos", width=24,
+                  command=self.abrir_configuracion).grid(row=9, column=0, columnspan=2, pady=(15, 3))
+        tk.Button(self.marco_opciones, text="Ver estadisticas", width=24,
+                  command=self.abrir_estadisticas).grid(row=10, column=0, columnspan=2)
+
     def crear_zona_historial(self):
         self.marco_historial = tk.Frame(self.ventana, padx=15)
         self.marco_historial.grid(row=1, column=0, columnspan=2, sticky="we", pady=(5, 0))
@@ -146,9 +152,13 @@ class InterfazPomodoro:
         self.etiqueta_total = tk.Label(self.marco_historial, text="", font=("Arial", 10))
         self.etiqueta_total.grid(row=2, column=0, sticky="w", pady=8)
 
+        self.boton_editar = tk.Button(self.marco_historial, text="Editar sesion", width=15,
+                                      command=self.abrir_edicion)
+        self.boton_editar.grid(row=2, column=1, sticky="e", pady=8)
+
         self.boton_eliminar = tk.Button(self.marco_historial, text="Eliminar sesion", width=15,
                                         command=self.eliminar_sesion)
-        self.boton_eliminar.grid(row=2, column=2, sticky="e", pady=8)
+        self.boton_eliminar.grid(row=2, column=2, sticky="e", pady=8, padx=(8, 0))
 
     # ------------------------------------------------------------------
     # datos (se piden al backend)
@@ -273,6 +283,154 @@ class InterfazPomodoro:
         self.tabla.delete(str(id_sesion))
         self.actualizar_total()
         self.actualizar_pantalla()
+
+    # ------------------------------------------------------------------
+    # ventanas secundarias (Toplevel)
+    # ------------------------------------------------------------------
+
+    def nueva_ventana(self, titulo, tamano):
+        ventana2 = tk.Toplevel(self.ventana)
+        ventana2.title(titulo)
+        if tamano is not None:
+            ventana2.geometry(tamano)  # si no se le da tamano, se acomoda sola al contenido
+        ventana2.resizable(False, False)
+        ventana2.transient(self.ventana)  # que quede encima de la principal
+        ventana2.grab_set()               # y que no se pueda tocar la principal mientras este abierta
+        return ventana2
+
+    def abrir_configuracion(self):
+        self.ventana_config = self.nueva_ventana("Configurar tiempos", "300x175")
+        marco = tk.Frame(self.ventana_config, padx=20, pady=15)
+        marco.pack()
+
+        tk.Label(marco, text="Minutos de estudio:").grid(row=0, column=0, sticky="w", pady=5)
+        self.entrada_estudio = tk.Entry(marco, width=8)
+        self.entrada_estudio.insert(0, str(self.configuracion.consultar_tiempo_estudio()))
+        self.entrada_estudio.grid(row=0, column=1, pady=5)
+
+        tk.Label(marco, text="Minutos de descanso:").grid(row=1, column=0, sticky="w", pady=5)
+        self.entrada_descanso = tk.Entry(marco, width=8)
+        self.entrada_descanso.insert(0, str(self.configuracion.consultar_tiempo_descanso()))
+        self.entrada_descanso.grid(row=1, column=1, pady=5)
+
+        tk.Label(marco, text="(entre 1 y 120, el descanso mas corto)", fg="gray").grid(row=2, column=0, columnspan=2)
+        tk.Button(marco, text="Guardar", width=12, command=self.guardar_configuracion).grid(row=3, column=0,
+                                                                                         columnspan=2, pady=12)
+
+    def guardar_configuracion(self):
+        try:
+            estudio = int(self.entrada_estudio.get())
+            descanso = int(self.entrada_descanso.get())
+        except ValueError:
+            messagebox.showerror("Dato no valido", "Escriba los minutos como numeros enteros", parent=self.ventana_config)
+            return
+
+        try:
+            self.configuracion.establecer_tiempos(estudio, descanso)
+            self.gestor.guardar_configuracion(estudio, descanso)
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("Dato no valido", str(error), parent=self.ventana_config)
+            return
+
+        self.ventana_config.destroy()
+        if self.modo.get() == "Pomodoro" and self.sesion.hay_bloque_pausado():
+            messagebox.showinfo("Configuracion", "Tiempos guardados. Se aplican desde el siguiente bloque")
+        else:
+            messagebox.showinfo("Configuracion", "Tiempos guardados")
+        self.actualizar_pantalla()
+
+    def abrir_edicion(self):
+        id_sesion = self.sesion_seleccionada()
+        if id_sesion is None:
+            return
+        sesion = self.historial.buscar_sesion(id_sesion)
+        self.id_editando = id_sesion
+
+        self.ventana_edicion = self.nueva_ventana(f"Editar sesion #{id_sesion}", "340x260")
+        marco = tk.Frame(self.ventana_edicion, padx=20, pady=15)
+        marco.pack()
+
+        tk.Label(marco, text=f"{sesion['tipo']} de {sesion['duracion']} min",
+                 font=("Arial", 11, "bold")).grid(row=0, column=0, columnspan=2)
+        tk.Label(marco, text=f"{sesion['fecha']} a las {sesion['hora']}", fg="gray").grid(row=1, column=0,
+                                                                                          columnspan=2, pady=(0, 10))
+
+        tk.Label(marco, text="Materia:").grid(row=2, column=0, sticky="w")
+        nombres = ["-"]
+        for materia in self.materias:
+            nombres.append(materia.consultar_nombre())
+        self.materia_edicion = tk.StringVar(value=sesion["materia"])
+        ttk.Combobox(marco, textvariable=self.materia_edicion, values=nombres, state="readonly",
+                     width=20).grid(row=2, column=1, pady=4)
+
+        tk.Label(marco, text="Nota:").grid(row=3, column=0, sticky="w")
+        self.entrada_nota = tk.Entry(marco, width=23)
+        self.entrada_nota.insert(0, sesion["nota"])
+        self.entrada_nota.grid(row=3, column=1, pady=4)
+
+        self.completada_edicion = tk.BooleanVar(value=sesion["completada"])
+        tk.Checkbutton(marco, text="Sesion completa", variable=self.completada_edicion).grid(row=4, column=0,
+                                                                                            columnspan=2, pady=4)
+
+        tk.Button(marco, text="Guardar cambios", width=15, command=self.guardar_edicion).grid(row=5, column=0,
+                                                                                            columnspan=2, pady=10)
+
+    def guardar_edicion(self):
+        nota = self.entrada_nota.get().strip()
+        try:
+            sesion = self.historial.actualizar_sesion(self.id_editando, self.materia_edicion.get(), nota,
+                                                      self.completada_edicion.get())
+            self.gestor.actualizar_sesion(sesion)
+        except (ValueError, PermissionError) as error:
+            messagebox.showerror("No se pudo guardar", str(error), parent=self.ventana_edicion)
+            return
+
+        self.tabla.item(str(self.id_editando), values=self.valores_de_sesion(sesion))
+        self.ventana_edicion.destroy()
+        self.actualizar_total()
+        self.actualizar_pantalla()
+
+    def abrir_estadisticas(self):
+        ventana_est = self.nueva_ventana("Estadisticas", None)
+        marco = tk.Frame(ventana_est, padx=20, pady=15)
+        marco.pack(fill="both")
+
+        resumen = self.estadisticas.resumen_general()
+        tk.Label(marco, text="Resumen general", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=4,
+                                                                                sticky="w")
+        datos = [
+            ("Sesiones guardadas:", resumen["sesiones"]),
+            ("Minutos de estudio:", resumen["minutos_estudio"]),
+            ("Minutos de descanso:", resumen["minutos_descanso"]),
+            ("Pomodoros completos:", resumen["pomodoros"]),
+            ("Materia mas estudiada:", resumen["materia_top"]),
+        ]
+        fila = 1
+        for texto, valor in datos:
+            tk.Label(marco, text=texto).grid(row=fila, column=0, columnspan=2, sticky="w")
+            tk.Label(marco, text=str(valor), font=("Arial", 10, "bold")).grid(row=fila, column=2, columnspan=2,
+                                                                             sticky="w")
+            fila += 1
+
+        tk.Label(marco, text="Hoy por materia (meta diaria)", font=("Arial", 12, "bold")).grid(row=fila, column=0,
+                                                                                            columnspan=4, sticky="w",
+                                                                                            pady=(15, 5))
+        fila += 1
+        for i, titulo in enumerate(["Materia", "Hoy", "Meta", "Avance"]):
+            tk.Label(marco, text=titulo, fg="gray").grid(row=fila, column=i, sticky="w", padx=(0, 15))
+        fila += 1
+
+        hoy = self.estadisticas.minutos_por_materia(solo_hoy=True)
+        for materia in self.materias:
+            minutos = hoy.get(materia.consultar_nombre(), 0)
+            tk.Label(marco, text=materia.consultar_nombre()).grid(row=fila, column=0, sticky="w")
+            tk.Label(marco, text=f"{minutos} min").grid(row=fila, column=1, sticky="w")
+            tk.Label(marco, text=f"{materia.consultar_meta()} min").grid(row=fila, column=2, sticky="w")
+            tk.Label(marco, text=f"{materia.porcentaje_meta(minutos)} %").grid(row=fila, column=3, sticky="w")
+            fila += 1
+
+        tk.Button(marco, text="Cerrar", width=10, command=ventana_est.destroy).grid(row=fila, column=0, columnspan=4,
+                                                                                   pady=15)
 
     # ------------------------------------------------------------------
     # temporizador
