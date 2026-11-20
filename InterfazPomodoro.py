@@ -84,6 +84,15 @@ class InterfazPomodoro:
         self.etiqueta_reloj = tk.Label(self.marco_reloj, text="25:00", font=("Consolas", 64, "bold"))
         self.etiqueta_reloj.pack()
 
+        # ELEMENTO EXTRA (no visto en clase): ttk.Progressbar
+        # muestra cuanto va del bloque actual. mode="determinate" porque si se sabe cuanto falta,
+        # y el valor va de 0 a maximum (100 = bloque terminado)
+        self.barra_progreso = ttk.Progressbar(self.marco_reloj, orient="horizontal", length=380,
+                                              mode="determinate", maximum=100)
+        self.barra_progreso.pack(pady=(0, 2))
+        self.etiqueta_progreso = tk.Label(self.marco_reloj, text="0 % del bloque", fg="gray")
+        self.etiqueta_progreso.pack()
+
         self.etiqueta_info = tk.Label(self.marco_reloj, text="", font=("Arial", 11))
         self.etiqueta_info.pack(pady=5)
 
@@ -567,7 +576,7 @@ class InterfazPomodoro:
         marco.pack(fill="both")
 
         resumen = self.estadisticas.resumen_general()
-        tk.Label(marco, text="Resumen general", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=4,
+        tk.Label(marco, text="Resumen general", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=5,
                                                                                 sticky="w")
         datos = [
             ("Sesiones guardadas:", resumen["sesiones"]),
@@ -584,7 +593,7 @@ class InterfazPomodoro:
             fila += 1
 
         tk.Label(marco, text="Hoy por materia (meta diaria)", font=("Arial", 12, "bold")).grid(row=fila, column=0,
-                                                                                            columnspan=4, sticky="w",
+                                                                                            columnspan=5, sticky="w",
                                                                                             pady=(15, 5))
         fila += 1
         for i, titulo in enumerate(["Materia", "Hoy", "Meta", "Avance"]):
@@ -597,10 +606,15 @@ class InterfazPomodoro:
             tk.Label(marco, text=materia.consultar_nombre()).grid(row=fila, column=0, sticky="w")
             tk.Label(marco, text=f"{minutos} min").grid(row=fila, column=1, sticky="w")
             tk.Label(marco, text=f"{materia.consultar_meta()} min").grid(row=fila, column=2, sticky="w")
-            tk.Label(marco, text=f"{materia.porcentaje_meta(minutos)} %").grid(row=fila, column=3, sticky="w")
+            # aqui tambien se usa la Progressbar para ver el avance de la meta
+            avance = materia.porcentaje_meta(minutos)
+            barra = ttk.Progressbar(marco, length=90, mode="determinate", maximum=100)
+            barra["value"] = avance
+            barra.grid(row=fila, column=3, sticky="w", pady=2)
+            tk.Label(marco, text=f"{avance} %").grid(row=fila, column=4, sticky="w")
             fila += 1
 
-        tk.Button(marco, text="Cerrar", width=10, command=ventana_est.destroy).grid(row=fila, column=0, columnspan=4,
+        tk.Button(marco, text="Cerrar", width=10, command=ventana_est.destroy).grid(row=fila, column=0, columnspan=5,
                                                                                    pady=15)
 
     # ------------------------------------------------------------------
@@ -726,20 +740,29 @@ class InterfazPomodoro:
         if self.modo.get() == "Pomodoro":
             estado = self.sesion.consultar_estado_actual()
             if self.sesion.hay_bloque_pausado():
-                tiempo = self.sesion.consultar_tiempo_pausado()
+                bloque = self.sesion.preparar_bloque()
+                tiempo = bloque.tiempo_en_pantalla()
+                avance = bloque.porcentaje_avance()
             else:
                 tiempo = self.sesion.crear_bloque().tiempo_en_pantalla()
+                avance = 0
             color = InterfazPomodoro.colores[estado]
+            texto_avance = f"{int(avance)} % del bloque"
         else:
             estado = "Cronometro libre"
             if self.medidor is None:
                 tiempo = "00:00"
+                avance = 0
             else:
                 tiempo = self.medidor.tiempo_en_pantalla()
+                avance = self.medidor.porcentaje_avance()
             color = InterfazPomodoro.colores["Libre"]
+            texto_avance = f"{int(avance)} % del limite de 2 horas"
 
         self.etiqueta_estado.config(text=estado, fg=color)
         self.etiqueta_reloj.config(text=tiempo, fg=color)
+        self.barra_progreso["value"] = avance
+        self.etiqueta_progreso.config(text=texto_avance)
         self.etiqueta_info.config(text=f"Materia: {self.materia.get()}   |   "
                                        f"Pomodoros hoy: {self.estadisticas.pomodoros_de_hoy()}   |   "
                                        f"Estudio hoy: {self.estadisticas.minutos_de_hoy()} min")
